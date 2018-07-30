@@ -1,4 +1,6 @@
 import numpy as np
+inputFile="SJ5000XCalibration.npz"
+npzfile = np.load(inputFile) #load camera parameters
 #Run Options
 opts={
 "deltaMode":0,
@@ -9,9 +11,11 @@ opts={
 }
 
 cam_prms = {
-    "correction":0.91,#correction factor experimentally observed
+    "correction":.91,#correction factor experimentally observed
     "FOV":np.array([170,70]), 
-    #'Cmtx':npzfile['Cmtx'],
-    #'distortion':npzfile['distortion'] #parameters computed using calibrate.py from the openCV samples
      }
+distortComp={
+    'Cmtx':npzfile['Cmtx'],
+    'distortion':npzfile['distortion'] #parameters computed using calibrate.py 
+}
  

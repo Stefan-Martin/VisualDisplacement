@@ -19,8 +19,27 @@ def detectBestPoint(img_gray,x,y,radius):
         msk=cv2.circle(msk,(x,y),radius,(255,0,0),-1)
         points=cv2.goodFeaturesToTrack(img_gray, mask = msk, maxCorners=1,**feature_params) #select best Shi-Tomasi point in radius around click
         #self.frame=cv2.circle(self.frame, (x,y), 2, (0,0, 255), -1) #blue is click point
-        x,y=points[0,0,:2]
-        #self.frame=cv2.circle(self.frame, (x,y), 2, (255,0, 0), -1) #red is best point
-        #cv2.imshow("Click Ref",self.frame)
-        #cv2.waitKey(1)
-        return (x,y)
+        if points is not None:
+            x,y=points[0,0,:2]
+            #self.frame=cv2.circle(self.frame, (x,y), 2, (255,0, 0), -1) #red is best point
+            #cv2.imshow("Click Ref",self.frame)
+            #cv2.waitKey(1)
+            return (x,y)
+        else:
+            return False
+
+def maskMaker(img,x,y,typ,size,invert):
+    mask = np.zeros_like(img)
+    if typ=="Circle":
+        mask=cv2.circle(mask,(x,y),size,255,-1)
+    elif typ=="Square":
+        mask=cv2.rectangle(mask,(x+size/2,y+size/2),(x-size/2,y-size/2),255,-1)
+    if invert:
+        mask=np.invert(mask)
+    return mask
+
+def cropCenter(img,x,y,size):
+    x=int(x)
+    y=int(y)
+    img=img[y-size:y+size,x-size:x+size]
+    return img
