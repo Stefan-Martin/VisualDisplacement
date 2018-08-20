@@ -1,5 +1,6 @@
 import cv2 
 import numpy as np
+import matplotlib as mplot
 # params for ShiTomasi corner detection
 feature_params = dict(qualityLevel = 0.05,
                        minDistance = 7,
@@ -43,3 +44,8 @@ def cropCenter(img,x,y,size):
     y=int(y)
     img=img[y-size:y+size,x-size:x+size]
     return img
+
+"""def plotgraph(dataPoints,window):
+    for tr in dataPoints:
+        for index, point in enumerate(tr):
+            deltaP=np.subtract(,firstPoint)"""

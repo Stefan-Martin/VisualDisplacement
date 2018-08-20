@@ -18,7 +18,7 @@ from tkinter import filedialog
 import cv2
 from csv import writer
 from collections import deque
-from Utils import detectBestPoint,cropCenter
+from Utils import detectBestPoint,cropCenter#, plotgraph
 import Config
 
 root = tkinter.Tk() #File open dialog
@@ -39,6 +39,7 @@ class VDT:
         self.frame=0
         self.frame_gray=0
         self.pTemplates=[]
+        self.maxes=[]
        
     def mouseClick(self,event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -49,6 +50,7 @@ class VDT:
             self.tracks.append(newTrack)
             pointTemplate=cropCenter(self.frame_gray,x,y,15)
             self.pTemplates.append(pointTemplate)
+            self.maxes.append((0,0))
             Npts=len(self.tracks)
             print ("Added point" + str(Npts-1))
     
@@ -114,7 +116,7 @@ class VDT:
                     deltaReal,deltaDisplay,speed=self.displaceMap(deltaP,deltaT,**Config.cam_prms)
                     displayPoint=(int(point[0]),int(point[1]))
                     displayPoint=tuple(np.add(displayPoint,(2,-25)))
-                    self.mask=cv2.putText(self.mask, "D"+deltaDisplay, displayPoint, cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), lineType=cv2.LINE_AA) #display point readout
+                    self.mask=cv2.putText(self.mask, "D"+deltaDisplay, displayPoint, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), lineType=cv2.LINE_AA) #display point readout
                     speedRow.append(round(speed,1))
                     deltaRow.append(deltaReal)
                 prev_point=point
@@ -145,10 +147,10 @@ class VDT:
                 cv2.arrowedLine(overlay,loc[0],Xpoint,(0,255,0),thickness=3) #XLine
                 cv2.arrowedLine(overlay,Xpoint,loc[1],(0,0,255),thickness=3) #YLine
                 visM=cv2.add(self.frame,overlay)
-                cv2.imshow("Measure",visM)
+                cv2.imshow("frame",visM)
         elif event== cv2.EVENT_RBUTTONDOWN:
             self.MeasurePts.clear()
-            cv2.imshow("Measure",self.frame)
+            cv2.imshow("frame",self.frame)
 
     def run(self):
         paused=False
@@ -176,21 +178,17 @@ class VDT:
                 if k==ord('p'):
                     paused=False 
                 elif k==ord('m'):
-                    cv2.destroyWindow('frame')
-                    cv2.namedWindow('Measure') #opens new window for measuring utility
-                    cv2.setMouseCallback('Measure', self.measure)
+                    cv2.setMouseCallback('frame', self.measure)
                     cv2.putText(self.frame, "Select two points to measure, Rightclick to clear", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), lineType=cv2.LINE_AA)
-                    cv2.imshow("Measure",vis)
+                    cv2.imshow("frame",vis)
                     cv2.waitKey(0) #press any key to exit measure mode
-                    cv2.destroyWindow("Measure")
-                    cv2.namedWindow('frame')
                     cv2.setMouseCallback('frame', self.mouseClick)
 
             videoRead,self.frame = self.cap.read() #get next video frame
             if not videoRead: #detect end of video
                 break
             timer = cv2.getTickCount() #for computing FPS
-            #self.frame = cv2.undistort(self.frame, Config.distortComp['Cmtx'], Config.distortComp['distortion']) #Lens distortion compensation
+            self.frame = cv2.undistort(self.frame, Config.distortComp['Cmtx'], Config.distortComp['distortion']) #Lens distortion compensation
             self.frame=cv2.resize(self.frame, (0,0), fx=downScale, fy=downScale) #resize the image to make it more managable for processing
             self.frame_gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
             
@@ -218,15 +216,24 @@ class VDT:
                         continue
                     tr.append((x, y)) #add good points to track
                     cv2.circle(vis, (x, y), 4, (0,255, 0), -1) #mark good points with filled green circle
-                    cv2.putText(vis, "P"+str(idx), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), lineType=cv2.LINE_AA) #display point index
+                    cv2.putText(vis, "P"+str(idx), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), lineType=cv2.LINE_AA) #display point index
                     window=Config.opts['speedWindow']
-                    if len(tr)>window and (tr[-window]!=tr[-1]):
+                    if len(tr)>2*window and (tr[-window]!=tr[-1]): 
                         diff=np.subtract(tr[-1],tr[-window]) #compute the speed of the point over the last n frames, length determined by window
                         _thing,_curD,curS=self.displaceMap(diff,window,**Config.cam_prms)
-                        if curS>0.8:
-                            cv2.putText(vis, "S:"+str(round(curS,1)), (x, int(y+10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), lineType=cv2.LINE_AA) #print current speed
+                        meme=np.add(tr[-1],tr[-2*window])
+                        accel=np.linalg.norm(np.subtract(meme,np.multiply(tr[-window],2.0)))/(np.power(window,2)) #2nd order backwards finite difference
+                        accel*=Config.cam_prms['FPS'] #convert from mm/frame to mm/s
+                        if curS>1.1:
+                            cv2.putText(vis, "S:"+str(round(curS,1)), (x, int(y+10)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), lineType=cv2.LINE_AA) #print current speed
+                        v,a=self.maxes[idx]
+                        if curS>v:
+                            v=curS
+                        if accel>a:
+                            a=accel
+                        self.maxes[idx]=(v,a)#maxes
                 cv2.polylines(vis, [np.int32(tr) for tr in self.tracks], False, (255,255, 255),thickness=3) #draw a path behind the point
-            if lostPoints: #check if empty
+            """if lostPoints: #check if empty
                 for m,(index,template,x,y,snapshots) in enumerate(lostPoints):
                     cv2.circle(vis, (x, y), 4, (0,0, 255), -1) #mark bad points with filled red circle
                     newCenter=self.reattach((x,y),60,template) #attempt to re-detect lost points based on template matching
@@ -236,22 +243,26 @@ class VDT:
                         self.tracks.insert(index,newTrack) #re-add the lost points at their original position
                         self.snapshots.insert(index,snapshots) #re-add the snapshots stored for this point.
                         del lostPoints[m]
-
+"""
             self.prev_gray = frame_track
             vis=cv2.rectangle(vis,(15,5),(100,30),(0,0,0),-1)
             fps = round(cv2.getTickFrequency() / (cv2.getTickCount() - timer),1)
             vis=cv2.putText(vis, "FPS"+str(fps),(20,20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), lineType=cv2.LINE_AA) #display FPS
             vis=cv2.add(vis,self.mask)
             cv2.imshow('frame',vis)
-            self.out.write(vis) #output video
+            self.out.write(vis) #output videoxs
             k = cv2.waitKey(1) 
             if k ==ord('x'):
+                print("Max speed, Max Accel")
+                print(self.maxes)
                 break #exit the program
             elif k==ord('g'):
                 self.mask=np.zeros_like(self.frame)
                 deltas,speeds=self.grabPoints(Config.opts['deltaMode']) #Grabs points and computes displacements
             elif k==ord('p'):
                 paused=True
+            elif k==ord('h'):
+                plotgraph(self.tracks)
             elif k==ord('e'):
                 self.CSVexport(deltas) #export displacements to CSV
         self.out.release() #cleanup, very important

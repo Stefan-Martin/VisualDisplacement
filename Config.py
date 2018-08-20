@@ -4,7 +4,7 @@ npzfile = np.load(inputFile) #load camera parameters
 #Run Options
 opts={
 "deltaMode":0,
-"speedWindow":8,
+"speedWindow":3,
 "downScale":0.8,
 "useCLAHE":1,
 "track_len":100,
